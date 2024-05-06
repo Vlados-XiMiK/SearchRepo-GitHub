@@ -1,7 +1,9 @@
 <?php
 
 function search_github_repositories($query) {
-    $url = "https://api.github.com/search/repositories";
+    // Використовуйте змінну середовища або константу замість вставлення рядка напряму
+    $url = getenv('GITHUB_API_URL') ?: "https://api.github.com/search/repositories";
+
     $params = array('q' => $query);
     $headers = array(
         'Accept: application/vnd.github.v3+json',
@@ -16,14 +18,15 @@ function search_github_repositories($query) {
     $context = stream_context_create($options);
     $response = file_get_contents("$url?" . http_build_query($params), false, $context);
 
-    if ($response !== false) {
-        $data = json_decode($response, true);
-        $repositories = $data['items'];
-        return $repositories;
-    } else {
-        echo "Під час отримання репозиторіїв сталася помилка.";
-        return array();
+    if (!$response) {
+        // Кинути виняток з помилкою
+        throw new Exception("Під час отримання репозиторіїв сталася помилка.");
     }
+
+    // Використовуйте !$response замість $response !== false для кращої оптимізації простору
+    $data = json_decode($response, true);
+    $repositories = $data['items'];
+    return $repositories;
 }
 
 function display_repository_info($repository) {
@@ -33,32 +36,38 @@ function display_repository_info($repository) {
     echo "Зірки: " . $repository['stargazers_count'] . "\n";
     echo "Форки: " . $repository['forks_count'] . "\n";
     echo "Спостерігачі: " . $repository['watchers_count'] . "\n";
-    echo "Мова: " . $repository['language'] . "\n\n";
+
+    // Виправлення виведення мови, яка може бути декількох
+    echo "Мова: " . implode(', ', (array)$repository['language']) . "\n\n";
 }
 
 echo "Введіть пошуковий запит: ";
 $search_query = trim(fgets(STDIN));
 
-$repositories = search_github_repositories($search_query);
+try {
+    $repositories = search_github_repositories($search_query);
 
-if (!empty($repositories)) {
-    echo "Результати пошуку:\n";
-    foreach ($repositories as $key => $repo) {
-        echo ($key + 1) . ". " . $repo['full_name'] . "\n";
-    }
+    if (!empty($repositories)) {
+        echo "Результати пошуку:\n";
+        foreach ($repositories as $key => $repo) {
+            echo ($key + 1) . ". " . $repo['full_name'] . "\n";
+        }
 
-    echo "Введіть номер репозиторію, щоб переглянути деталі (або введіть 0 для виходу): ";
-    $choice = trim(fgets(STDIN));
+        echo "Введіть номер репозиторію, щоб переглянути деталі (або введіть 0 для виходу): ";
+        $choice = trim(fgets(STDIN));
 
-    if (is_numeric($choice) && $choice > 0 && $choice <= count($repositories)) {
-        display_repository_info($repositories[$choice - 1]);
-    } elseif ($choice == 0) {
-        echo "Вихід з програми.\n";
+        if (is_numeric($choice) && $choice > 0 && $choice <= count($repositories)) {
+            display_repository_info($repositories[$choice - 1]);
+        } elseif ($choice == 0) {
+            echo "Вихід з програми.\n";
+        } else {
+            echo "Недійсний вибір. Вихід з програми.\n";
+        }
     } else {
-        echo "Недійсний вибір. Вихід з програми.\n";
+        echo "Репозиторії не знайдені.\n";
     }
-} else {
-    echo "Репозиторії не знайдені.\n";
+} catch (Exception $e) {
+    echo $e->getMessage() . "\n";
 }
 
 ?>
